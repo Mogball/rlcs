@@ -1,7 +1,170 @@
 #include <iostream>
+#include <memory>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 using namespace std;
 
+template <typename ItT, typename FcnT>
+class mapped_iterator {
+public:
+  explicit mapped_iterator(ItT it, FcnT fcn)
+      : m_it{std::move(it)},
+        m_fcn{std::move(fcn)} {}
+
+  mapped_iterator operator++() {
+    ++m_it;
+    return *this;
+  }
+
+  auto &operator*() {
+    return m_fcn(*m_it);
+  }
+
+  bool operator!=(const mapped_iterator<ItT, FcnT> &it) {
+    return m_it != it.m_it;
+  }
+
+private:
+  ItT m_it;
+  FcnT m_fcn;
+};
+
+template <typename ItT>
+class range {
+public:
+  explicit range(ItT it, ItT end)
+      : m_it{std::move(it)},
+        m_end{std::move(end)} {}
+
+  auto begin() { return m_it; }
+  auto end() { return m_end; }
+
+private:
+  ItT m_it, m_end;
+};
+
+template <typename ItT> auto make_range(ItT it, ItT end) {
+  return range<ItT>{std::move(it), std::move(end)};
+}
+
+template <typename ItT, typename FcnT> auto map_iterator(ItT it, FcnT fcn) {
+  return mapped_iterator<ItT, FcnT>{std::move(it), std::move(fcn)};
+}
+
+template <typename ContainerT, typename FcnT>
+auto map_range(const ContainerT &c, FcnT fcn) {
+  return make_range(map_iterator(begin(c), fcn), map_iterator(end(c), fcn));
+}
+
+template <typename ItT> auto make_second_iterator(ItT it) {
+  return map_iterator(std::move(it), [](auto &p) -> add_lvalue_reference_t<decltype(p.second)> { return p.second; });
+}
+
+class Predicate {
+  friend class PredicateUniquer;
+
+  explicit Predicate(long repr)
+      : m_repr{repr} {}
+
+public:
+  auto repr() const { return m_repr; }
+
+private:
+  long m_repr;
+};
+
+class PredicateUniquer {
+public:
+  Predicate *get(long repr) {
+    if (auto it = preds.find(repr); it != std::end(preds)) {
+      return &it->second;
+    }
+    auto [it, inserted] = preds.emplace(repr, Predicate{repr});
+    return &it->second;
+  }
+
+  auto size() const { return std::size(preds); }
+  auto begin() { return make_second_iterator(std::begin(preds)); }
+  auto end() { return make_second_iterator(std::end(preds)); }
+
+private:
+  unordered_map<long, Predicate> preds;
+};
+
+class Pattern {
+  friend class PatternUniquer;
+
+  explicit Pattern(string &&name, unordered_set<Predicate *> &&preds)
+      : m_name{move(name)},
+        m_preds{std::move(preds)} {}
+
+public:
+  string_view name() const { return m_name; }
+  auto &preds() const { return m_preds; }
+
+private:
+  string m_name;
+  unordered_set<Predicate *> m_preds;
+};
+
+class PatternUniquer {
+public:
+  Pattern *get(string name, unordered_set<Predicate *> preds) {
+    if (auto it = patterns.find(name); it != std::end(patterns)) {
+      return &it->second;
+    }
+    Pattern pattern{move(name), move(preds)};
+    auto [it, inserted] = patterns.emplace(pattern.name(), move(pattern));
+    return &it->second;
+  }
+
+  auto size() const { return std::size(patterns); }
+  auto begin() { return make_second_iterator(std::begin(patterns)); }
+  auto end() { return make_second_iterator(std::end(patterns)); }
+
+private:
+  unordered_map<string_view, Pattern> patterns;
+};
+
+class ReferenceNode {
+public:
+  explicit ReferenceNode(ReferenceNode *parent, Predicate *diff)
+      : m_parent{parent},
+        m_diff{diff} {}
+
+  auto *parent() const { return m_parent; }
+  auto *diff() const { return m_diff; }
+  auto &refs() const { return m_refs; }
+
+private:
+  ReferenceNode *m_parent;
+  Predicate *m_diff;
+  unordered_set<Predicate *> m_refs;
+};
+
+void rlcs(PredicateUniquer &preds, PatternUniquer &patterns) {
+  size_t K{};
+  for (auto &pattern : patterns) {
+    K += size(pattern.preds());
+  }
+
+  vector<ReferenceNode> nodes;
+  nodes.reserve(K);
+
+  auto *root = &nodes.emplace_back(nullptr, nullptr);
+  unordered_map<Predicate *, ReferenceNode *> occur;
+  occur.reserve(size(preds));
+
+  for (auto &pattern : patterns) {
+    for (auto *pred : pattern.preds()) {
+
+    }
+  }
+}
+
 int main() {
-  cout << "Hi" << endl;
+  PredicateUniquer preds;
+  PatternUniquer patterns;
 }
