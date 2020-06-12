@@ -101,7 +101,7 @@ class Pattern {
         m_preds{std::move(preds)} {}
 
 public:
-  string_view name() const { return m_name; }
+  const string &name() const { return m_name; }
   auto &preds() const { return m_preds; }
 
 private:
@@ -125,22 +125,22 @@ public:
   auto end() { return make_second_iterator(std::end(patterns)); }
 
 private:
-  unordered_map<string_view, Pattern> patterns;
+  unordered_map<string, Pattern> patterns;
 };
 
 class ReferenceNode {
 public:
-  explicit ReferenceNode(ReferenceNode *parent, Predicate *diff)
+  explicit ReferenceNode(ReferenceNode *parent, Pattern *diff)
       : m_parent{parent},
         m_diff{diff} {}
 
   auto *parent() const { return m_parent; }
   auto *diff() const { return m_diff; }
-  auto &refs() const { return m_refs; }
+  auto &refs() { return m_refs; }
 
 private:
   ReferenceNode *m_parent;
-  Predicate *m_diff;
+  Pattern *m_diff;
   unordered_set<Predicate *> m_refs;
 };
 
@@ -156,15 +156,66 @@ void rlcs(PredicateUniquer &preds, PatternUniquer &patterns) {
   auto *root = &nodes.emplace_back(nullptr, nullptr);
   unordered_map<Predicate *, ReferenceNode *> occur;
   occur.reserve(size(preds));
+  for (auto &pred : preds) {
+    occur.emplace(&pred, root);
+    root->refs().insert(&pred);
+  }
 
   for (auto &pattern : patterns) {
+    unordered_map<ReferenceNode *, ReferenceNode *> cache;
     for (auto *pred : pattern.preds()) {
+      auto curIt = occur.find(pred);
+      auto *cur = curIt->second;
 
+      auto it = cache.find(cur);
+      ReferenceNode *diff;
+      if (it == end(cache)) {
+        diff = &nodes.emplace_back(cur, &pattern);
+        cache.emplace(cur, diff);
+      } else {
+        diff = it->second;
+      }
+      occur.insert_or_assign(curIt, pred, diff);
+      cur->refs().erase(pred);
+      diff->refs().insert(pred);
     }
+  }
+
+  for (auto it = nodes.rbegin(), e = nodes.rend(); it != e; ++it) {
+    vector<Pattern *> trace;
+    auto *cur = &*it;
+    if (cur->refs().empty()) {
+      continue;
+    }
+    while (cur->diff()) {
+      trace.push_back(cur->diff());
+      cur = cur->parent();
+    }
+
+    cout << "( ";
+    for (auto *pattern : trace) {
+      cout << pattern->name() << " ";
+    }
+    cout << "): [ ";
+    for (auto *pred : it->refs()) {
+      cout << static_cast<char>(pred->repr()) << " ";
+    }
+    cout << "]" << endl;
   }
 }
 
 int main() {
   PredicateUniquer preds;
+  auto *A = preds.get('A');
+  auto *B = preds.get('B');
+  auto *C = preds.get('C');
+  auto *D = preds.get('D');
+  auto *E = preds.get('E');
+
   PatternUniquer patterns;
+  auto *P1 = patterns.get("P1", {A, B, C});
+  auto *P2 = patterns.get("P2", {A, B, D});
+  auto *P3 = patterns.get("P3", {C, D, E});
+
+  rlcs(preds, patterns);
 }
